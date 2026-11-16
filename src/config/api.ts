@@ -9,13 +9,13 @@ export function apiFetch(
 ): Promise<Response> {
   const headers = new Headers(options.headers);
 
-  const telegram = window.Telegram?.WebApp as (typeof window.Telegram.WebApp & {
-  initData?: string;
-}) | undefined;
-  const initData = telegram?.initData;
+  const initData = (
+    window.Telegram?.WebApp as unknown as
+      { initData?: string } | undefined
+  )?.initData;
 
   console.log('[API AUTH]', {
-    telegramExists: Boolean(telegram),
+    telegramExists: Boolean(window.Telegram?.WebApp),
     initDataExists: Boolean(initData),
     initDataLength: initData?.length ?? 0,
     request: path,
