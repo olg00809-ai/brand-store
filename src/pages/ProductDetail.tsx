@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { ProductDetail } from '../mockData';
-import API_URL from '../config/api';
+import API_URL, { apiFetch } from '../config/api';
   // Получаем ID пользователя из Telegram (или фейковый для теста в браузере)
-  const userId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id || 123456789;
 
 export const ProductDetailPage = ({ productId, onBack }: { productId: number, onBack: () => void }) => {
   const [product, setProduct] = useState<ProductDetail | null>(null);
@@ -119,12 +118,13 @@ export const ProductDetailPage = ({ productId, onBack }: { productId: number, on
             if (!variant) return;
 
             try {
-              const res = await fetch(`${API_URL}/api/cart/add`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+              const res = await apiFetch('/api/cart/add', {
+                 method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json'
+                    },
                 body: JSON.stringify({
-                  user_id: userId,
-                  variant_id: variant.id,
+                   variant_id: variant.id,
                   quantity: 1
                  })
               });
