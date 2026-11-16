@@ -1,377 +1,282 @@
 
-import { useState, useEffect } from 'react';
-import API_URL from '../config/api';
+import { useEffect, useState } from 'react';
+import API_URL, { apiFetch } from '../config/api';
+
+interface CartItem {
+  id: number;
+  product_name: string;
+  size: string;
+  price: number;
+  quantity: number;
+  file_id: string | null;
+}
+
+interface CartData {
+  items: CartItem[];
+  total: number;
+}
 
 export const Cart = () => {
-  const [cart, setCart] = useState<{ items: any[], total: number }>({
-    items: [],
-    total: 0
-  });
-
+  const [items, setItems] = useState<CartItem[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [isCheckout, setIsCheckout] = useState(false);
-  const [successOrderId, setSuccessOrderId] = useState<number | null>(null);
+  const [error, setError] = useState('');
+  const [ordering, setOrdering] = useState(false);
+  const [success, setSuccess] = useState('');
 
-  // Поля формы
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [city, setCity] = useState('');
-  const [address, setAddress] = useState('');
+  const formatPrice = (price: number) =>
+    new Intl.NumberFormat('ru-RU').format(price) + ' ₽';
 
-  const userId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id || 123456789;
+  const loadCart = async () => {
+    try {
+      setLoading(true);
+      setError('');
 
-  // Загрузка корзины
-  const loadCart = () => {
-    fetch(`${API_URL}/api/cart/${userId}`)
-      .then(res => res.json())
-      .then(data => {
-        setCart(data);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
+      const response = await apiFetch('/api/cart');
+
+      if (!response.ok) {
+        throw new Error(`Ошибка загрузки корзины: ${response.status}`);
+      }
+
+      const data: CartData = await response.json();
+
+      setItems(Array.isArray(data.items) ? data.items : []);
+      setTotal(Number(data.total) || 0);
+    } catch (err) {
+      console.error('Cart loading error:', err);
+      setError('Не удалось загрузить корзину. Попробуйте обновить страницу.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
     loadCart();
-  }, [userId]);
+  }, []);
 
-  // Оформление заказа
-  const handleCheckout = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!name || !phone || !city || !address) {
-      alert('Заполните все поля!');
-      return;
-    }
-
+  const createOrder = async () => {
     try {
-      const res = await fetch(`${API_URL}/api/orders/create`, {
+      setOrdering(true);
+      setError('');
+      setSuccess('');
+
+      const response = await apiFetch('/api/orders/create', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          user_id: userId,
-          customer_name: name,
-          phone: phone,
-          city: city,
-          address: address
-        })
+        body: JSON.stringify({})
       });
 
-      const data = await res.json();
+      const data = await response.json();
 
-      if (res.ok) {
-        setSuccessOrderId(data.order_id);
-        setCart({ items: [], total: 0 });
-      } else {
-        alert(data.detail || 'Ошибка при создании заказа');
+      if (!response.ok) {
+        throw new Error(data.detail || 'Не удалось оформить заказ');
       }
+
+      setItems([]);
+      setTotal(0);
+      setSuccess(`Заказ №${data.order_id} успешно создан!`);
     } catch (err) {
-      alert('Сервер недоступен');
+      setError(
+        err instanceof Error ? err.message : 'Ошибка оформления заказа'
+      );
+    } finally {
+      setOrdering(false);
     }
   };
 
   if (loading) {
-    return <p className="page-title">Загрузка...</p>;
+    return (
+      <div style={{ padding: 40, textAlign: 'center', color: '#aaa' }}>
+        Загрузка корзины...
+      </div>
+    );
   }
 
-  // Если заказ успешно создан
-  if (successOrderId) {
-    return (
-      <div
-        style={{
+  return (
+    <div style={{ paddingBottom: 30 }}>
+      <h1 className="page-title">Корзина</h1>
+
+      {success && (
+        <div style={{
+          padding: 16,
+          marginBottom: 20,
+          background: '#17251b',
+          color: '#a5e6b5',
           textAlign: 'center',
-          paddingTop: '40px',
-          paddingBottom: '120px'
-        }}
-      >
-        <div style={{ fontSize: '48px', marginBottom: '16px' }}>
-          ✅
+          borderRadius: 6
+        }}>
+          {success}
         </div>
+      )}
 
-        <h1 style={{ fontSize: '20px', marginBottom: '8px' }}>
-          Заказ оформлен!
-        </h1>
-
-        <p style={{ color: '#888', marginBottom: '24px' }}>
-          Номер вашего заказа: #{successOrderId}
-        </p>
-
-        <button
-          onClick={() => {
-            setSuccessOrderId(null);
-            setIsCheckout(false);
-          }}
-          style={{
-            padding: '12px 24px',
-            background: '#fff',
-            color: '#000',
-            borderRadius: '8px',
-            border: 'none',
-            fontWeight: 600
-          }}
-        >
-          Вернуться в магазин
-        </button>
-      </div>
-    );
-  }
-
-  // Пустая корзина
-  if (cart.items.length === 0 && !isCheckout) {
-    return (
-      <div style={{ paddingBottom: '120px' }}>
-        <h1 className="page-title">Корзина</h1>
-
-        <p style={{ textAlign: 'center', color: '#888' }}>
-          Ваша корзина пуста
-        </p>
-      </div>
-    );
-  }
-
-  // Форма оформления заказа
-  if (isCheckout) {
-    return (
-      <div style={{ paddingBottom: '120px' }}>
-        <button
-          onClick={() => setIsCheckout(false)}
-          style={{
-            background: 'none',
-            border: 'none',
-            color: '#888',
-            marginBottom: '16px',
-            cursor: 'pointer'
-          }}
-        >
-          ← Назад в корзину
-        </button>
-
-        <h1 className="page-title">Оформление заказа</h1>
-
-        <form
-          onSubmit={handleCheckout}
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '12px'
-          }}
-        >
-          <input
-            required
-            placeholder="Ваше имя"
-            value={name}
-            onChange={e => setName(e.target.value)}
-            style={{
-              padding: '14px',
-              background: '#141414',
-              border: '1px solid #333',
-              color: '#fff',
-              borderRadius: '8px'
-            }}
-          />
-
-          <input
-            required
-            placeholder="Телефон"
-            value={phone}
-            onChange={e => setPhone(e.target.value)}
-            style={{
-              padding: '14px',
-              background: '#141414',
-              border: '1px solid #333',
-              color: '#fff',
-              borderRadius: '8px'
-            }}
-          />
-
-          <input
-            required
-            placeholder="Город"
-            value={city}
-            onChange={e => setCity(e.target.value)}
-            style={{
-              padding: '14px',
-              background: '#141414',
-              border: '1px solid #333',
-              color: '#fff',
-              borderRadius: '8px'
-            }}
-          />
-
-          <input
-            required
-            placeholder="Адрес (или пункт выдачи)"
-            value={address}
-            onChange={e => setAddress(e.target.value)}
-            style={{
-              padding: '14px',
-              background: '#141414',
-              border: '1px solid #333',
-              color: '#fff',
-              borderRadius: '8px'
-            }}
-          />
-
-          <div
-            style={{
-              background: '#141414',
-              padding: '16px',
-              borderRadius: '8px',
-              marginTop: '12px',
-              display: 'flex',
-              justifyContent: 'space-between'
-            }}
-          >
-            <span>К оплате:</span>
-            <b>{cart.total.toLocaleString('ru-RU')} ₽</b>
-          </div>
-
+      {error && (
+        <div style={{
+          padding: 16,
+          marginBottom: 20,
+          background: '#301818',
+          color: '#ffaaaa',
+          textAlign: 'center',
+          borderRadius: 6
+        }}>
+          {error}
           <button
-            type="submit"
+            onClick={loadCart}
             style={{
-              padding: '16px',
+              display: 'block',
+              margin: '12px auto 0',
+              padding: '8px 18px',
               background: '#fff',
               color: '#000',
               border: 'none',
-              borderRadius: '8px',
-              fontWeight: 600,
-              marginTop: '12px',
               cursor: 'pointer'
             }}
           >
-            Подтвердить заказ
+            Повторить
           </button>
-        </form>
-      </div>
-    );
-  }
+        </div>
+      )}
 
-  // Просмотр корзины
-  return (
-    <div style={{ paddingBottom: '120px' }}>
-      <h1 className="page-title">Корзина</h1>
-
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '16px',
-          marginBottom: '32px'
-        }}
-      >
-        {cart.items.map(item => {
-          const imgSrc = item.file_id
-            ? `${API_URL}/api/image/${item.file_id}`
-            : 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?q=80&w=200&auto=format&fit=crop';
-
-          return (
-            <div
-              key={item.id}
-              style={{
-                display: 'flex',
-                gap: '16px',
-                background: '#141414',
-                padding: '12px',
-                borderRadius: '12px'
-              }}
-            >
-              <img
-                src={imgSrc}
-                alt={item.product_name}
-                style={{
-                  width: '80px',
-                  height: '100px',
-                  objectFit: 'cover',
-                  borderRadius: '8px'
-                }}
-              />
-
+      {items.length === 0 ? (
+        <div style={{
+          textAlign: 'center',
+          padding: '60px 20px',
+          color: '#888'
+        }}>
+          <div style={{ fontSize: 40, marginBottom: 16 }}>♧</div>
+          <p style={{ fontSize: 15 }}>Ваша корзина пуста</p>
+          <p style={{ fontSize: 12, marginTop: 8 }}>
+            Добавьте товары из каталога
+          </p>
+        </div>
+      ) : (
+        <>
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 16
+          }}>
+            {items.map(item => (
               <div
+                key={item.id}
                 style={{
+                  display: 'flex',
+                  gap: 14,
+                  paddingBottom: 16,
+                  borderBottom: '1px solid #292929'
+                }}
+              >
+                {item.file_id ? (
+                  <img
+                    src={`${API_URL}/api/image/${encodeURIComponent(item.file_id)}`}
+                    alt={item.product_name}
+                    style={{
+                      width: 105,
+                      height: 130,
+                      objectFit: 'cover',
+                      background: '#171717',
+                      borderRadius: 4
+                    }}
+                  />
+                ) : (
+                  <div style={{
+                    width: 105,
+                    height: 130,
+                    background: '#171717',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#666',
+                    fontSize: 12
+                  }}>
+                    Нет фото
+                  </div>
+                )}
+
+                <div style={{
                   flex: 1,
                   display: 'flex',
                   flexDirection: 'column',
                   justifyContent: 'space-between'
-                }}
-              >
-                <div>
-                  <h4
-                    style={{
-                      fontSize: '14px',
-                      margin: '0 0 4px 0'
-                    }}
-                  >
-                    {item.product_name}
-                  </h4>
+                }}>
+                  <div>
+                    <div style={{
+                      fontSize: 14,
+                      color: '#fff',
+                      marginBottom: 10
+                    }}>
+                      {item.product_name}
+                    </div>
 
-                  <p
-                    style={{
-                      fontSize: '12px',
+                    <div style={{ fontSize: 12, color: '#888' }}>
+                      Размер: {item.size}
+                    </div>
+
+                    <div style={{
+                      fontSize: 12,
                       color: '#888',
-                      margin: 0
-                    }}
-                  >
-                    Размер: {item.size} | Кол-во: {item.quantity}
-                  </p>
+                      marginTop: 6
+                    }}>
+                      Количество: {item.quantity}
+                    </div>
+                  </div>
+
+                  <div style={{
+                    fontSize: 15,
+                    color: '#fff'
+                  }}>
+                    {formatPrice(item.price * item.quantity)}
+                  </div>
                 </div>
-
-                <p
-                  style={{
-                    fontSize: '16px',
-                    fontWeight: 600,
-                    margin: 0
-                  }}
-                >
-                  {item.price.toLocaleString('ru-RU')} ₽
-                </p>
               </div>
+            ))}
+          </div>
+
+          <div style={{
+            marginTop: 28,
+            paddingTop: 20,
+            borderTop: '1px solid #333'
+          }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: 22
+            }}>
+              <span style={{ color: '#aaa', fontSize: 13 }}>
+                Итого
+              </span>
+
+              <span style={{
+                color: '#fff',
+                fontSize: 21
+              }}>
+                {formatPrice(total)}
+              </span>
             </div>
-          );
-        })}
-      </div>
 
-      <div
-        style={{
-          background: '#141414',
-          padding: '20px',
-          borderRadius: '12px',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center'
-        }}
-      >
-        <span style={{ fontSize: '16px', color: '#888' }}>
-          Итого:
-        </span>
-
-        <span style={{ fontSize: '20px', fontWeight: 600 }}>
-          {cart.total.toLocaleString('ru-RU')} ₽
-        </span>
-      </div>
-
-      <button
-        onClick={() => {
-          console.log("Кнопка 'Перейти к оформлению' нажата!");
-          setIsCheckout(true);
-        }}
-        style={{
-          width: '100%',
-          padding: '16px',
-          background: '#fff',
-          color: '#000',
-          border: 'none',
-          borderRadius: '8px',
-          fontWeight: 600,
-          marginTop: '16px',
-          cursor: 'pointer',
-          position: 'relative',
-          zIndex: 10
-        }}
-      >
-        Перейти к оформлению
-      </button>
+            <button
+              onClick={createOrder}
+              disabled={ordering || items.length === 0}
+              style={{
+                width: '100%',
+                padding: 16,
+                background: '#fff',
+                color: '#000',
+                border: 'none',
+                fontSize: 12,
+                letterSpacing: 1.5,
+                textTransform: 'uppercase',
+                cursor: ordering ? 'wait' : 'pointer',
+                opacity: ordering ? 0.6 : 1
+              }}
+            >
+              {ordering ? 'Оформляем...' : 'Оформить заказ'}
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 };
