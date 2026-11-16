@@ -9,7 +9,9 @@ export function apiFetch(
 ): Promise<Response> {
   const headers = new Headers(options.headers);
 
-  const telegram = window.Telegram?.WebApp;
+  const telegram = window.Telegram?.WebApp as (typeof window.Telegram.WebApp & {
+  initData?: string;
+}) | undefined;
   const initData = telegram?.initData;
 
   console.log('[API AUTH]', {
